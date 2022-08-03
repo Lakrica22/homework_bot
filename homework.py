@@ -46,7 +46,6 @@ handler.setFormatter(formatter)
 
 def send_message(bot, message):
     """Отправляет сообщение в Telegram чат."""
-
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
         logging.info(f'В Telegram отправлено сообщение {message}')
@@ -59,7 +58,6 @@ def get_api_answer(current_timestamp):
     Функция должна вернуть ответ API,преобразовав его
     из формата JSON к типам данных Python.
     """
-
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
 
@@ -108,14 +106,12 @@ def parse_status(homework):
 
 def check_tokens():
     """Проверяет доступность переменных окружения."""
-
     if TELEGRAM_TOKEN and PRACTICUM_TOKEN and TELEGRAM_CHAT_ID:
         return True
 
 
 def main():
     """Основная логика работы бота."""
-
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     current_timestamp = int(time.time())
     STATUS = ''
