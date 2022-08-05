@@ -1,11 +1,14 @@
-import os
 import requests
-import logging
 import telegram
-import time
-from logging.handlers import RotatingFileHandler
 from dotenv import load_dotenv
+
+import os
+import time
+import logging
+from logging.handlers import RotatingFileHandler
 from http import HTTPStatus
+
+from urls import ENDPOINT
 
 load_dotenv()
 
@@ -13,12 +16,12 @@ PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
-RETRY_TIME = 600
-ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
+TELEGRAM_RETRY_TIME: int = 600
+
 HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
 
 
-HOMEWORK_STATUSES = {
+HOMEWORK_VERDICTS = {
     'approved': 'Работа проверена: ревьюеру всё понравилось. Ура!',
     'reviewing': 'Работа взята на проверку ревьюером.',
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
@@ -44,6 +47,11 @@ formatter = logging.Formatter(
 handler.setFormatter(formatter)
 
 
+class APIUnexpectedHTTPStatus(Exception):
+    """Исключение при ответе сервера отличным от 200"""
+    pass
+
+
 def send_message(bot, message):
     """Отправляет сообщение в Telegram чат."""
     try:
@@ -65,17 +73,28 @@ def get_api_answer(current_timestamp):
         response = requests.get(ENDPOINT, headers=HEADERS, params=params)
     except Exception as error:
         logging.error(f'Ошибка при запросе к единственному API: {error}')
-        raise Exception(f'Ошибка при запросе к основному API: {error}')
+        raise APIUnexpectedHTTPStatus(
+            f'Ошибка при запросе к основному API: {error}'
+        )
     if response.status_code != HTTPStatus.OK:
         status_code = response.status_code
         logging.error(f'Ошибка {status_code}')
-        raise Exception(f'Ошибка {status_code}')
-    return response.json()
+        raise APIUnexpectedHTTPStatus(f'Ошибка {status_code}')
+    try:
+        return response.json()
+    except ValueError:
+        logger.error('Ошибка парсинга ответа из формата json')
+        raise ValueError('Ошибка парсинга ответа из формата json')
 
 
 def check_response(response):
     """Проверяет ответ API на корректность."""
-    if type(response) is not dict:
+    try:
+        response
+        logging.info('Ожидает ответа сервера')
+    except APIUnexpectedHTTPStatus:
+        logger.error('Ответ сервера не получен')
+    if (isinstance(response, list)):
         raise TypeError('Ответ API отличен от словаря')
     try:
         list_homework = response['homeworks']
@@ -98,9 +117,9 @@ def parse_status(homework):
         raise Exception('Отсутствует ключ "status" в ответе API')
     homework_name = homework['homework_name']
     homework_status = homework['status']
-    if homework_status not in HOMEWORK_STATUSES:
+    if homework_status not in HOMEWORK_VERDICTS:
         raise Exception(f'Неизвестный статус работы: {homework_status}')
-    verdict = HOMEWORK_STATUSES[homework_status]
+    verdict = HOMEWORK_VERDICTS[homework_status]
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
@@ -127,12 +146,11 @@ def main():
             if message != STATUS:
                 send_message(bot, message)
                 STATUS = message
-            time.sleep(RETRY_TIME)
-
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
             logger.error(message)
-            time.sleep(RETRY_TIME)
+        finally:
+            time.sleep(TELEGRAM_RETRY_TIME)
 
 
 if __name__ == '__main__':
