@@ -48,7 +48,8 @@ handler.setFormatter(formatter)
 
 
 class APIUnexpectedHTTPStatus(Exception):
-    """Исключение при ответе сервера отличным от 200"""
+    """Исключение при ответе сервера отличным от 200."""
+
     pass
 
 
